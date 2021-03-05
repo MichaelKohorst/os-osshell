@@ -82,6 +82,7 @@ int main (int argc, char **argv)
              if(strcmp(command_list_exec[0], exitStr) == 0)//means to exit
             {
                 std::cout << "\n";
+                appendCommandToHistory(userinput,  command_list.size());
                 exit(0);
             }
             else if(strcmp(command_list_exec[0], history) == 0)//one of the history commands
@@ -100,12 +101,12 @@ int main (int argc, char **argv)
                 else //number history command
                 {
                     bool isNum = true;
-                    for(int j = 0; j < sizeof(command_list_exec[1]);j++)
+                    for(int j = 0; j < strlen(command_list_exec[1]);j++)//loops through string to confirm its a digit
                     {
                         if(!isdigit(command_list_exec[1][j]))
                         {
                             isNum =false;
-                            j = sizeof(command_list_exec[1]) +1; 
+                            j = strlen(command_list_exec[1]) +1; 
                         }
                     }
                     if(isNum && command_list_exec[2] == NULL)//is actually history 'number' command
@@ -115,7 +116,7 @@ int main (int argc, char **argv)
                     }
                     else//not actually history number command
                     {
-                        std::cout << "<command_name>: Error command not found" << "\n";
+                        std::cout << "Error: history expects an integer > 0 (or 'clear')" << "\n";
                     }
                 }
             }
@@ -139,7 +140,7 @@ int main (int argc, char **argv)
                 }
                 else//command not found
                 {
-                    std::cout << "<command_name>: Error command not found" << "\n";
+                    std::cout << userinput << ": Error command not found" << "\n";
                 }
             }
             else//command in any directory
@@ -169,7 +170,7 @@ int main (int argc, char **argv)
                 }
                 if(found == 0)//Did not find command
                 {
-                    std::cout << "<command_name>: Error command not found" << "\n";
+                    std::cout << userinput << ": Error command not found" << "\n";
                 }
             }
         }
@@ -325,21 +326,29 @@ void printHistoryNum(int num)//command for print history for a certain number
         vectorOfStringsToArrayOfCharArrays(fileLines, &fileContent);
         for(int i = fileLines.size()-num; i < fileLines.size() && i >= 0;i++)
         {
-          std::cout << fileContent[i] << "\n";
+          std::cout << "  "<< i+1  << ": "<<fileContent[i] << "\n";
         }
     }
-
-    
-    
-    
-
 }
 
 void printHistory() {//print history
-    std::ifstream f("historyText.txt");//open file
-
-    if (f.is_open())//while open print to screen
-        std::cout << f.rdbuf();
+    std::vector<std::string> fileLines;
+    std::fstream history;
+    if(std::filesystem::exists("historyText.txt"))
+    {
+        history.open("historyText.txt");
+        std::string line;
+        while(getline(history, line))
+        {
+            fileLines.push_back(line);
+        }
+        char** fileContent;
+        vectorOfStringsToArrayOfCharArrays(fileLines, &fileContent);
+        for(int i = 0; i < fileLines.size();i++)
+        {
+          std::cout << "  "<< i+1 << ": "<<fileContent[i] << "\n";
+        }
+    }
 }
 
 void appendCommandToHistory(std::string command,  int size) {//adds to the history file
