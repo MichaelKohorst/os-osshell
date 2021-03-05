@@ -8,8 +8,9 @@
 #include <sys/mman.h>
 #include <sys/wait.h>
 #include <filesystem>
-
- 
+#include <stdio.h>
+#include <stdlib.h>
+#include <fstream>
 
 void allocateArrayOfCharArrays(char ***array_ptr, size_t array_length, size_t item_size);
 void freeArrayOfCharArrays(char **array, size_t array_length);
@@ -17,9 +18,14 @@ void splitString(std::string text, char d, std::vector<std::string>& result);
 void removeLeadingSpaces(char *arr);
 bool isHistoryCommand(char *arr);
 bool isExitCommand(char *arr);
-void splitPathAndCommand(std::string text, char *path, std::vector<std::string>& commmand);
+void splitPathAndCommand(std::string text,  std::vector<std::string>& commmand);
 void vectorOfStringsToArrayOfCharArrays(std::vector<std::string>& list, char ***result);
 bool fileExecutableExists(std::string file_path);
+void printHistory();
+void appendCommandToHistory(std::string command,  int size);
+void printHistoryNum(int num);
+std::ofstream tempfile;
+std::ifstream historyfile;
 
 int main (int argc, char **argv)
 {
@@ -57,98 +63,124 @@ int main (int argc, char **argv)
     vectorOfStringsToArrayOfCharArrays(command_list, &command_list_exec);*/
     // use `command_list_exec` in the execv() function rather than looping and printing
  
-    bool should_exit = true;
-    while(should_exit) 
+    std::string userinput;
+    bool exitShould = true;
+    while(exitShould) //while loop will run until user exits
     {
         std::cout << "osshell> ";
-        char *user_input = new char[128];
-        std::cin.getline(user_input, 128);
-        char path[64];
-        strcat(path,"/usr/bin/");
-        std::string str(user_input);
-        splitPathAndCommand(str, path, command_list);
-        vectorOfStringsToArrayOfCharArrays(command_list, &command_list_exec);
-        strcat(path, command_list_exec[0]);
-        //std::cout << "str: " << str << "\n"; 
-        std::cout << "path: " << path << "\n"; 
-        char exit[] = "exit";
+        std::getline(std::cin, userinput);//gets user input
+        splitPathAndCommand(userinput, command_list);//splits user input
+        vectorOfStringsToArrayOfCharArrays(command_list, &command_list_exec);//converts the commands from vector to char**
+        char exitStr[] = "exit";//used to compare against user input
         char history[] = "history";
+        char clear[] = "clear";
         int pid;
-        std::cout << "command_list_exec[0]: " << command_list_exec[0] << "\n"; 
-        if(strcmp(command_list_exec[0], exit) == 0)
+        bool add = true;//whether or not to add to history
+        
+        if(!userinput.empty())//if empty then new line
         {
-           should_exit = false;
-        }
-        else 
-        {
-            int found = 0;
-            for(int i = 0; i < os_path_list.size(); i++)
+             if(strcmp(command_list_exec[0], exitStr) == 0)//means to exit
             {
-                if(strcmp(os_path_list[i].c_str(), path))
+                std::cout << "\n";
+                exit(0);
+            }
+            else if(strcmp(command_list_exec[0], history) == 0)//one of the history commands
+            {
+                if(command_list_exec[1] == NULL)//history command
                 {
-                    std::cout << "os_path: " << os_path_list[i].c_str() << "\n";
-                    //pid = fork();
-                    found = 1;
+                    printHistory();
+                }
 
+                else if(strcmp(command_list_exec[1], clear) == 0)//history command with clear
+                {
+                    std::remove("historyText.txt");
+                    add = false;
+                }
+
+                else //number history command
+                {
+                    bool isNum = true;
+                    for(int j = 0; j < sizeof(command_list_exec[1]);j++)
+                    {
+                        if(!isdigit(command_list_exec[1][j]))
+                        {
+                            isNum =false;
+                            j = sizeof(command_list_exec[1]) +1; 
+                        }
+                    }
+                    if(isNum && command_list_exec[2] == NULL)//is actually history 'number' command
+                    {
+                        std::string histNum(command_list_exec[1]);
+                        printHistoryNum(stoi(histNum));
+                    }
+                    else//not actually history number command
+                    {
+                        std::cout << "<command_name>: Error command not found" << "\n";
+                    }
                 }
             }
+            else if(command_list_exec[0][0] == '.' || command_list_exec[0][0] == '/')//if command in directory
+            {
+                if(std::filesystem::exists(command_list_exec[0]))//checks to see if command exist
+                {
+                    
+                    pid = fork();//creates child
+                    if(pid ==0)//checks to see if child
+                    {
+                        execv(command_list_exec[0], command_list_exec);
+                        exit(0);
+                    }
+                    else//otherwise parent
+                    {
+                        int status;
+                        waitpid(pid, &status, 0);//wait for child to finish
+                        
+                    }
+                }
+                else//command not found
+                {
+                    std::cout << "<command_name>: Error command not found" << "\n";
+                }
+            }
+            else//command in any directory
+            {
+                int found = 0;
+                for(int i = 0; i < os_path_list.size(); i++)//Runs through possible paths
+                {
+                    std::string filePath = os_path_list[i] + "/" + command_list_exec[0];//creation of path
+                    if(std::filesystem::exists(filePath))//if file path exist
+                    {
 
-            /*if(found == 1 && pid == 0)
-            {
-               execv(path, command_list_exec); 
+                        pid = fork();//creates child
+                        if(pid ==0)//if child
+                        {
+                            execv(filePath.c_str(), command_list_exec);//run exec
+                            exit(0);
+                        }
+                        else//parent
+                        {
+                            int status;
+                            waitpid(pid, &status, 0);//wait for child
+                        }
+                        i = os_path_list.size() + 1;
+                        found = 1;
+                    }
+                    
+                }
+                if(found == 0)//Did not find command
+                {
+                    std::cout << "<command_name>: Error command not found" << "\n";
+                }
             }
-            else if(found == 1 && pid != 0)
-            {
-                int status;
-                //waitpid(pid, &status,0);
-            }*/
-            if(command_list_exec[0] == "")
-            {
-
-            }
-            else    
-            {
-                std::cout << "<command_name>: Error command not found" << "\n";
-            }
-            std::cout << "found: " << found << "\n";
-            freeArrayOfCharArrays(command_list_exec, command_list.size() + 1);
         }
-        
+        if(add)//add command to history
+        {
+            appendCommandToHistory(userinput,  command_list.size());
+        }
+        freeArrayOfCharArrays(command_list_exec, command_list.size() + 1);
     }
-    
     return 0;
 }
-
- 
-
-/*
-
-   array_ptr: pointer to list of strings to be allocated
-
-   array_length: number of strings to allocate space for in the list
-
-   item_size: length of each string to allocate space for
-
-*/
-
-void allocateArrayOfCharArrays(char ***array_ptr, size_t array_length, size_t item_size)
-{
-
-    int i;
-
-    *array_ptr = new char*[array_length];
-
-    for (i = 0; i < array_length; i++)
-
-    {
-
-        (*array_ptr)[i] = new char[item_size];
-
-    }
-
-}
-
- 
 
 /*
 
@@ -271,8 +303,49 @@ bool fileExecutableExists(std::string file_path)
     return exists;
 }
 
-void splitPathAndCommand(std::string text, char *path, std::vector<std::string>& command)
+void splitPathAndCommand(std::string text, std::vector<std::string>& command)//all this does is basically call splitstring
 {
         std::vector<std::string> brokenText;
         splitString(text, ' ', command);
+}
+
+void printHistoryNum(int num)//command for print history for a certain number
+{
+    std::vector<std::string> fileLines;
+    std::fstream history;
+    if(std::filesystem::exists("historyText.txt"))
+    {
+        history.open("historyText.txt");
+        std::string line;
+        while(getline(history, line))
+        {
+            fileLines.push_back(line);
+        }
+        char** fileContent;
+        vectorOfStringsToArrayOfCharArrays(fileLines, &fileContent);
+        for(int i = fileLines.size()-num; i < fileLines.size() && i >= 0;i++)
+        {
+          std::cout << fileContent[i] << "\n";
+        }
+    }
+
+    
+    
+    
+
+}
+
+void printHistory() {//print history
+    std::ifstream f("historyText.txt");//open file
+
+    if (f.is_open())//while open print to screen
+        std::cout << f.rdbuf();
+}
+
+void appendCommandToHistory(std::string command,  int size) {//adds to the history file
+    
+    std::ofstream historyfile("historyText.txt", std::ios::app);//adds to history file, opens file
+    historyfile << command;//writes to file
+    historyfile << "\n";//new line
+    historyfile.close();//close history file.
 }
